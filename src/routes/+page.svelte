@@ -6,11 +6,11 @@
 
 	type Chain = {
 		rpc: string;
-		factory?: Promise<number> | number;
-		amplified_mathlib?: Promise<number> | number;
-		amplified_template?: Promise<number> | number;
-		volatile_mathlib?: Promise<number> | number;
-		volatile_template?: Promise<number> | number;
+		factory?: Promise<ethers.TransactionResponse> | Promise<number> | number;
+		amplified_mathlib?: Promise<ethers.TransactionResponse> | Promise<number> | number;
+		amplified_template?: Promise<ethers.TransactionResponse> | Promise<number> | number;
+		volatile_mathlib?: Promise<ethers.TransactionResponse> | Promise<number> | number;
+		volatile_template?: Promise<ethers.TransactionResponse> | Promise<number> | number;
 	};
 	const chains: Writable<Chain[]> = writable([]);
 
@@ -69,19 +69,28 @@
 		return 4;
 	}
 
-	function call(chain: Chain, contract: keyof typeof contractBytecodes) {
+	function call(index: number, contract: keyof typeof contractBytecodes) {
         function call_factory() {
-            const rpc = chain.rpc;
+            const rpc = $chains[index].rpc;
             const provider = new ethers.JsonRpcProvider(rpc);
             const signer = new ethers.Wallet(privateKey, provider);
             
-            const transaction = {
+            const transactionData = {
                 to: '0x4e59b44847b379578588920cA78FbF26c0B4956C',
                 data: contractBytecodes[contract]
             };
 
-            console.log(signer.call(transaction));
-            console.log(signer.sendTransaction(transaction));
+            const transactionResponse = signer.sendTransaction(transactionData);
+            chains.update(($chains) => {
+                const chain = $chains[index];
+                chain[contract] = transactionResponse;
+                transactionResponse.then((submittedTransaction) => {
+                    submittedTransaction.wait().then(() => {
+                        chain[contract] = resolveCode(provider.getCode(contractsAddresses[contract]));
+                    });
+                });
+                return $chains;
+            });
         }
         return call_factory;
 	}
@@ -158,7 +167,7 @@
 					{#await chain.factory}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(chain, 'factory')}>Deploy</button>
+						<button class="deployActivated" class:deployed on:click={call(i, 'factory')}>Deploy</button>
 					{/await}
 				</td>
 
@@ -166,28 +175,28 @@
 					{#await chain.amplified_mathlib}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(chain, 'amplified_mathlib')}>Deploy</button>
+						<button class="deployActivated" class:deployed on:click={call(i, 'amplified_mathlib')}>Deploy</button>
 					{/await}
 				</td>
 				<td>
 					{#await chain.amplified_template}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(chain, 'amplified_template')}>Deploy</button>
+						<button class="deployActivated" class:deployed on:click={call(i, 'amplified_template')}>Deploy</button>
 					{/await}
 				</td>
 				<td>
 					{#await chain.volatile_mathlib}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(chain, 'volatile_mathlib')}>Deploy</button>
+						<button class="deployActivated" class:deployed on:click={call(i, 'volatile_mathlib')}>Deploy</button>
 					{/await}
 				</td>
 				<td>
 					{#await chain.volatile_template}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(chain, 'volatile_template')}>Deploy</button>
+						<button class="deployActivated" class:deployed on:click={call(i, 'volatile_template')}>Deploy</button>
 					{/await}
 				</td>
 				<td>
