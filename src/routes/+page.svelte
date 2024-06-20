@@ -132,6 +132,7 @@
 			};
 
 			const transactionResponse = signer.sendTransaction(transactionData);
+			console({ transactionResponse });
 			chains.update(($chains) => {
 				const chain = $chains[index];
 				chain[contract] = transactionResponse.then(async (submittedTransaction) => {
@@ -199,7 +200,7 @@
 
 			const contractToCall = fromChain.expectedCCIAddress;
 
-			const cciContract = new ethers.Contract(contractToCall, cciABI, provider);
+			const cciContract = new ethers.Contract(contractToCall, cciABI, signer);
 
 			const destinationIdentifier: string =
 				chainChannels[messagingProtocol][fromChain.chainId.toString()][toChain.chainId.toString()];
@@ -216,8 +217,7 @@
 			if ((await toChain.interfaces.cci[messagingProtocol]) <= 4) return;
 			if ((await toChain.interfaces.garp[messagingProtocol]) <= 4) return;
 
-			cciContract.connect(signer);
-			// cciContract.connectNewChain(destinationIdentifier, remoteCCI, remoteGARP);
+			console.log(cciContract.connectNewChain(destinationIdentifier, remoteCCI, remoteGARP));
 		}
 		return connectInterfaces_factory;
 	}
