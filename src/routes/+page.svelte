@@ -25,11 +25,11 @@
 	type Chain = {
 		rpc: string;
 		chainId: bigint;
-		factory?: Promise<ethers.TransactionResponse> | Promise<number> | number;
-		amplified_mathlib?: Promise<ethers.TransactionResponse> | Promise<number> | number;
-		amplified_template?: Promise<ethers.TransactionResponse> | Promise<number> | number;
-		volatile_mathlib?: Promise<ethers.TransactionResponse> | Promise<number> | number;
-		volatile_template?: Promise<ethers.TransactionResponse> | Promise<number> | number;
+		factory?: Promise<number> | number;
+		amplified_mathlib?: Promise<number> | number;
+		amplified_template?: Promise<number> | number;
+		volatile_mathlib?: Promise<number> | number;
+		volatile_template?: Promise<number> | number;
 		provider?: ethers.JsonRpcProvider;
 		messagingProtocolAddress: string;
 		messagingProtocolDeployed?: Promise<number> | number;
@@ -132,10 +132,9 @@
 			const transactionResponse = signer.sendTransaction(transactionData);
 			chains.update(($chains) => {
 				const chain = $chains[index];
-				chain[contract] = transactionResponse;
-				transactionResponse.then((submittedTransaction) => {
-					submittedTransaction.wait().then(() => {
-						chain[contract] = resolveCode(provider.getCode(contractsAddresses[contract]));
+				chain[contract] = transactionResponse.then(async (submittedTransaction) => {
+					return submittedTransaction.wait().then(() => {
+						return getCode(provider, contractsAddresses[contract]);
 					});
 				});
 				return $chains;
@@ -166,17 +165,21 @@
 			if (transactionData.data === undefined)
 				throw Error(`interface type ${interfaceType} not found`);
 
-			// const transactionResponse = signer.sendTransaction(transactionData);
-			// chains.update(($chains) => {
-			// 	const chain = $chains[index];
-			// 	chain[contract] = transactionResponse;
-			// 	transactionResponse.then((submittedTransaction) => {
-			// 		submittedTransaction.wait().then(() => {
-			// 			chain[contract] = resolveCode(provider.getCode(contractsAddresses[contract]));
-			// 		});
-			// 	});
-			// 	return $chains;
-			// });
+			const transactionResponse = signer.sendTransaction(transactionData);
+			chains.update(($chains) => {
+				const chain = $chains[index];
+				chain.interfaces[interfaceType][version] = transactionResponse.then(
+					async (submittedTransaction) => {
+						return submittedTransaction.wait().then(() => {
+							return getCode(
+								provider,
+								interfaceType === 'cci' ? chain.expectedCCIAddress : chain.expectedGarpAddress
+							);
+						});
+					}
+				);
+				return $chains;
+			});
 		}
 		return deploy_factory;
 	}
