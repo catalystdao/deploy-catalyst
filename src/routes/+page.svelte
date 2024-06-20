@@ -9,8 +9,10 @@
 		cciBytescodes,
 		sendLostGasTo,
 		type MessagingVerions,
-		type InterfaceTypes
+		type InterfaceTypes,
+		cciABI
 	} from '$lib/catalystconfig';
+	import { chains as chainChannels } from '@catalabs/catalyst-channel-lists';
 
 	let messagingProtocol: keyof typeof garpBytescodes = 'Wormhole';
 
@@ -149,7 +151,8 @@
 		version: keyof typeof garpBytescodes
 	) {
 		function deploy_factory() {
-			const rpc = $chains[index].rpc;
+			const chain = $chains[index];
+			const rpc = chain.rpc;
 			const provider = new ethers.JsonRpcProvider(rpc);
 			const signer = new ethers.Wallet(privateKey, provider);
 
@@ -157,15 +160,20 @@
 				to: factory,
 				data:
 					interfaceType === 'cci'
-						? cciBytescodes[version]
+						? cciBytescodes[version] +
+							chain.expectedGarpAddress.replace('0x', '').padStart(64, '0') +
+							(keyAddress ?? '').replace('0x', '').padStart(64, '0')
 						: interfaceType === 'garp'
-							? garpBytescodes[version]
+							? garpBytescodes[version] +
+								sendLostGasTo.replace('0x', '').padStart(64, '0') +
+								chain.messagingProtocolAddress.replace('0x', '').padStart(64, '0')
 							: undefined
 			};
 			if (transactionData.data === undefined)
 				throw Error(`interface type ${interfaceType} not found`);
 
 			const transactionResponse = signer.sendTransaction(transactionData);
+			console.log(transactionResponse);
 			chains.update(($chains) => {
 				const chain = $chains[index];
 				chain.interfaces[interfaceType][version] = transactionResponse.then(
@@ -182,6 +190,36 @@
 			});
 		}
 		return deploy_factory;
+	}
+
+	function connectInterfaces(fromChain: Chain, toChain: Chain) {
+		async function connectInterfaces_factory() {
+			const provider = fromChain.provider;
+			const signer = new ethers.Wallet(privateKey, provider);
+
+			const contractToCall = fromChain.expectedCCIAddress;
+
+			const cciContract = new ethers.Contract(contractToCall, cciABI, provider);
+
+			const destinationIdentifier: string =
+				chainChannels[messagingProtocol][fromChain.chainId.toString()][toChain.chainId.toString()];
+			const remoteCCI: string =
+				'0x14' + toChain.expectedCCIAddress.replace('0x', '').padStart(64 * 2, '0');
+			const remoteGARP: string =
+				'0x' + toChain.expectedGarpAddress.replace('0x', '').padStart(64, '0');
+			console.log({
+				destinationIdentifier,
+				cci: remoteCCI,
+				garp: remoteGARP
+			});
+			if (destinationIdentifier.length != 64 + 2) return;
+			if ((await toChain.interfaces.cci[messagingProtocol]) <= 4) return;
+			if ((await toChain.interfaces.garp[messagingProtocol]) <= 4) return;
+
+			cciContract.connect(signer);
+			// cciContract.connectNewChain(destinationIdentifier, remoteCCI, remoteGARP);
+		}
+		return connectInterfaces_factory;
 	}
 
 	function checkValue(index: number) {
@@ -261,7 +299,6 @@
 
 	function updateChainsSize() {
 		const arraySize = $chains.length;
-		console.log($chains[arraySize - 1].rpc);
 		if ($chains[arraySize - 1].rpc !== '') {
 			return addChain();
 		}
@@ -328,9 +365,6 @@
 						chain.expectedCCIAddress
 					);
 				}
-				console.log(chain);
-				console.log(i);
-				console.log();
 			}
 			return $chains;
 		});
@@ -524,13 +558,17 @@
 		</tr>
 	</thead>
 	<tbody>
-		{#each $chains.slice(0, $chains.length - 1) as chainx}
+		{#each $chains.slice(0, $chains.length - 1) as chainy}
 			<tr>
 				<td>
-					{chainx.chainId}
+					{chainy.chainId}
 				</td>
-				{#each $chains.slice(0, $chains.length - 1) as chainy}
-					<td> <button>Connect:{chainx.chainId},{chainy.chainId}</button> </td>
+				{#each $chains.slice(0, $chains.length - 1) as chainx}
+					<td>
+						<button on:click={connectInterfaces(chainx, chainy)}
+							>Connect:{chainx.chainId},{chainy.chainId}</button
+						>
+					</td>
 				{/each}
 			</tr>
 		{/each}

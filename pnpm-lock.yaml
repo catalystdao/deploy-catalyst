@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@catalabs/catalyst-channel-lists':
-        specifier: ^0.0.23
-        version: 0.0.23
+        specifier: ^0.0.24
+        version: 0.0.24
       '@cloudflare/workers-types':
         specifier: ^4.20240614.0
         version: 4.20240614.0
@@ -94,8 +94,8 @@ packages:
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
     engines: {node: '>=6.0.0'}
 
-  '@catalabs/catalyst-channel-lists@0.0.23':
-    resolution: {integrity: sha512-huQXnUfGWcO+6y/Jpk6AeAqn5YknGy6v+0Rhn/C3I77ytqU0xea2nqJn9Ebq1Q3nyZNY2Yt/mEd7NWn5RcF+OQ==}
+  '@catalabs/catalyst-channel-lists@0.0.24':
+    resolution: {integrity: sha512-pNBMichL9nmp5W17X+fiY50VZMKLPbQHZfb1MG/fJXOMwjI+19MvqRRFJUZUQh/8wyo7FOOTspzZaNG/7JcvYQ==}
 
   '@cloudflare/kv-asset-handler@0.3.3':
     resolution: {integrity: sha512-wpE+WiWW2kUNwNE0xyl4CtTAs+STjGtouHGiZPGRaisGB7eXXdbvfZdOrQJQVKgTxZiNAgVgmc7fj0sUmd8zyA==}
@@ -2066,7 +2066,7 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.5
       '@jridgewell/trace-mapping': 0.3.25
 
-  '@catalabs/catalyst-channel-lists@0.0.23': {}
+  '@catalabs/catalyst-channel-lists@0.0.24': {}
 
   '@cloudflare/kv-asset-handler@0.3.3':
     dependencies:
