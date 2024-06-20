@@ -1,5 +1,3 @@
-export const sendLostGasTo = '0x0000000099263f0735D03bB2787cE8FB84f6ED6E' as const;
-
 export const contractsAddresses = {
 	amplified_mathlib: '0x000000575b0D9cc6ddbd8990db4d845fe480281f',
 	amplified_template: '0x000000004aBe0D620b25b8B06B0712BDcff21899',

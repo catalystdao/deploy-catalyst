@@ -7,7 +7,6 @@
 		contractBytecodes,
 		garpBytescodes,
 		cciBytescodes,
-		sendLostGasTo,
 		type MessagingVerions,
 		type InterfaceTypes,
 		cciABI
@@ -40,9 +39,12 @@
 		expectedCCIAddress: string;
 	};
 	const chains: Writable<Chain[]> = writable([]);
+	const connections: Writable<{ [fromChain: string]: { [toChain: string]: Promise<boolean> } }> =
+		writable({});
 
 	let privateKey = '';
 	$: keyAddress = getAddress(privateKey);
+	let sendLostGasTo = '0x0000000099263f0735D03bB2787cE8FB84f6ED6E';
 
 	function getAddress(pk: string): string | undefined {
 		if (!pk) return;
@@ -202,8 +204,11 @@
 
 			const cciContract = new ethers.Contract(contractToCall, cciABI, signer);
 
-			const destinationIdentifier: string =
-				chainChannels[messagingProtocol][fromChain.chainId.toString()][toChain.chainId.toString()];
+			const destinationIdentifier: string | undefined =
+				chainChannels?.[messagingProtocol]?.[fromChain.chainId.toString()]?.[
+					toChain.chainId.toString()
+				];
+			if (destinationIdentifier === undefined) return;
 			const remoteCCI: string =
 				'0x14' + toChain.expectedCCIAddress.replace('0x', '').padStart(64 * 2, '0');
 			const remoteGARP: string =
@@ -368,6 +373,37 @@
 			}
 			return $chains;
 		});
+		checkAllConnections();
+	}
+
+	function checkAllConnections() {
+		connections.update(($connections) => {
+			const ch = $chains;
+			for (const fromChain of ch) {
+				const fromChainId = fromChain.chainId.toString();
+				if ($connections[fromChainId] == undefined) $connections[fromChainId] = {};
+				const provider = fromChain.provider;
+				const contractToCall = fromChain.expectedCCIAddress;
+				const cciContract = new ethers.Contract(contractToCall, cciABI, provider);
+				for (const toChain of ch) {
+					const toChainId = toChain.chainId.toString();
+					const destinationIdentifier: string =
+						chainChannels?.[messagingProtocol]?.[fromChain.chainId.toString()]?.[
+							toChain.chainId.toString()
+						];
+					if (destinationIdentifier === undefined) {
+						$connections[fromChainId][toChainId] = new Promise(() => true);
+						continue;
+					}
+					$connections[fromChainId][toChainId] = cciContract
+						.chainIdentifierToDestinationAddress(destinationIdentifier)
+						.then((result: string) => {
+							return result.length > 2;
+						});
+				}
+			}
+			return $connections;
+		});
 	}
 
 	onMount(() => {
@@ -379,6 +415,7 @@
 <p>Catalyst can be deployed permissionlessly.</p>
 <input bind:value={privateKey} placeholder="key" on:input={computeExpectedGarp} />
 {keyAddress}
+<input bind:value={sendLostGasTo} placeholder="sendlostgasto" />
 
 <h2 class="font-semibold text-lg">Core Catalyst</h2>
 <table class="w-full">
@@ -549,7 +586,7 @@
 						<button
 							class="w-40 monkey-ellipsis deployActivated"
 							class:deployed
-							on:click={deployInterfaces(x, 'cci', messagingProtocol)}
+							on:click={deployed ? deployInterfaces(x, 'cci', messagingProtocol) : () => {}}
 							>{chainx.expectedCCIAddress}</button
 						>
 					{/await}
@@ -565,9 +602,16 @@
 				</td>
 				{#each $chains.slice(0, $chains.length - 1) as chainx}
 					<td>
-						<button on:click={connectInterfaces(chainx, chainy)}
-							>Connect:{chainx.chainId},{chainy.chainId}</button
-						>
+						{#await $connections?.[chainx.chainId.toString()]?.[chainy.chainId.toString()]}
+							<button>Awaiting</button>
+						{:then connected}
+							<button
+								class="deployActivated"
+								class:deployed={connected}
+								on:click={connected ? connectInterfaces(chainx, chainy) : () => {}}
+								>Connect:{chainx.chainId},{chainy.chainId}</button
+							>
+						{/await}
 					</td>
 				{/each}
 			</tr>
