@@ -6,12 +6,21 @@
 		contractsAddresses,
 		contractBytecodes,
 		garpBytescodes,
-		sendLostGasTo
+		cciBytescodes,
+		sendLostGasTo,
+		type MessagingVerions,
+		type InterfaceTypes
 	} from '$lib/catalystconfig';
 
 	let messagingProtocol: keyof typeof garpBytescodes = 'Wormhole';
 
-	const factory = '0x4e59b44847b379578588920cA78FbF26c0B4956C';
+	const factory = '0x4e59b44847b379578588920cA78FbF26c0B4956C' as const;
+
+	type interfaces = {
+		[type in InterfaceTypes]: {
+			[version in MessagingVerions]: Promise<number> | number;
+		};
+	};
 
 	type Chain = {
 		rpc: string;
@@ -21,22 +30,14 @@
 		amplified_template?: Promise<ethers.TransactionResponse> | Promise<number> | number;
 		volatile_mathlib?: Promise<ethers.TransactionResponse> | Promise<number> | number;
 		volatile_template?: Promise<ethers.TransactionResponse> | Promise<number> | number;
+		provider?: ethers.JsonRpcProvider;
 		messagingProtocolAddress: string;
+		messagingProtocolDeployed?: Promise<number> | number;
+		interfaces: interfaces;
 		expectedGarpAddress: string;
+		expectedCCIAddress: string;
 	};
 	const chains: Writable<Chain[]> = writable([]);
-
-	const emptyChain = {
-		rpc: '',
-		chainId: 0n,
-		factory: 1,
-		amplified_mathlib: 1,
-		amplified_template: 1,
-		volatile_mathlib: 1,
-		volatile_template: 1,
-		messagingProtocolAddress: '',
-		expectedGarpAddress: ''
-	};
 
 	let privateKey = '';
 	$: keyAddress = getAddress(privateKey);
@@ -51,7 +52,26 @@
 	}
 
 	function addChain() {
-		$chains = [...$chains, { ...emptyChain }];
+		$chains = [
+			...$chains,
+			{
+				rpc: '',
+				chainId: 0n,
+				factory: 1,
+				amplified_mathlib: 1,
+				amplified_template: 1,
+				volatile_mathlib: 1,
+				volatile_template: 1,
+				messagingProtocolAddress: '',
+				interfaces: {
+					cci: {},
+					garp: {},
+					protocol: {}
+				} as interfaces,
+				expectedGarpAddress: '',
+				expectedCCIAddress: ''
+			}
+		];
 	}
 
 	function removeChain() {
@@ -69,11 +89,12 @@
 			console.log({ msg: 'Error network', error });
 			return;
 		}
-		chain.amplified_mathlib = resolveCode(provider.getCode(contractsAddresses.amplified_mathlib));
-		chain.amplified_template = resolveCode(provider.getCode(contractsAddresses.amplified_template));
-		chain.volatile_mathlib = resolveCode(provider.getCode(contractsAddresses.volatile_mathlib));
-		chain.volatile_template = resolveCode(provider.getCode(contractsAddresses.volatile_template));
-		chain.factory = resolveCode(provider.getCode(contractsAddresses.factory));
+		chain.provider = provider;
+		chain.amplified_mathlib = getCode(provider, contractsAddresses.amplified_mathlib);
+		chain.amplified_template = getCode(provider, contractsAddresses.amplified_template);
+		chain.volatile_mathlib = getCode(provider, contractsAddresses.volatile_mathlib);
+		chain.volatile_template = getCode(provider, contractsAddresses.volatile_template);
+		chain.factory = getCode(provider, contractsAddresses.factory);
 
 		await Promise.all([
 			chain.amplified_mathlib,
@@ -82,6 +103,10 @@
 			chain.volatile_template,
 			chain.factory
 		]);
+	}
+
+	async function getCode(provider: ethers.JsonRpcProvider, address: string): Promise<number> {
+		return resolveCode(provider.getCode(address));
 	}
 
 	async function resolveCode(code: Promise<string | null>): Promise<number> {
@@ -93,8 +118,8 @@
 		return 4;
 	}
 
-	function call(index: number, contract: keyof typeof contractBytecodes) {
-		function call_factory() {
+	function deployCore(index: number, contract: keyof typeof contractBytecodes) {
+		function deploy_factory() {
 			const rpc = $chains[index].rpc;
 			const provider = new ethers.JsonRpcProvider(rpc);
 			const signer = new ethers.Wallet(privateKey, provider);
@@ -116,7 +141,44 @@
 				return $chains;
 			});
 		}
-		return call_factory;
+		return deploy_factory;
+	}
+
+	function deployInterfaces(
+		index: number,
+		interfaceType: InterfaceTypes,
+		version: keyof typeof garpBytescodes
+	) {
+		function deploy_factory() {
+			const rpc = $chains[index].rpc;
+			const provider = new ethers.JsonRpcProvider(rpc);
+			const signer = new ethers.Wallet(privateKey, provider);
+
+			const transactionData = {
+				to: factory,
+				data:
+					interfaceType === 'cci'
+						? cciBytescodes[version]
+						: interfaceType === 'garp'
+							? garpBytescodes[version]
+							: undefined
+			};
+			if (transactionData.data === undefined)
+				throw Error(`interface type ${interfaceType} not found`);
+
+			// const transactionResponse = signer.sendTransaction(transactionData);
+			// chains.update(($chains) => {
+			// 	const chain = $chains[index];
+			// 	chain[contract] = transactionResponse;
+			// 	transactionResponse.then((submittedTransaction) => {
+			// 		submittedTransaction.wait().then(() => {
+			// 			chain[contract] = resolveCode(provider.getCode(contractsAddresses[contract]));
+			// 		});
+			// 	});
+			// 	return $chains;
+			// });
+		}
+		return deploy_factory;
 	}
 
 	function checkValue(index: number) {
@@ -134,13 +196,50 @@
 			const chainChanges: Promise<unknown>[] = [];
 			for (let i = 0; i < newRpcs.length; ++i) {
 				const newRpc = newRpcs[i];
-				const changedChain = { ...emptyChain, rpc: newRpc.replace(' ', '') };
+				const changedChain = {
+					...{
+						rpc: '',
+						chainId: 0n,
+						factory: 1,
+						amplified_mathlib: 1,
+						amplified_template: 1,
+						volatile_mathlib: 1,
+						volatile_template: 1,
+						messagingProtocolAddress: '',
+						interfaces: {
+							cci: {},
+							garp: {},
+							protocol: {}
+						} as interfaces,
+						expectedGarpAddress: '',
+						expectedCCIAddress: ''
+					},
+					rpc: newRpc.replace(' ', '')
+				};
 				$chains = [...$chains.slice(0, index + i), changedChain, ...$chains.slice(index + i + 1)];
 			}
 			for (let i = 0; i < newRpcs.length; ++i) {
 				const newRpc = newRpcs[i];
-				const changedChain = { ...emptyChain, rpc: newRpc.replace(' ', '') };
-				console.log(changedChain);
+				const changedChain = {
+					...{
+						rpc: '',
+						chainId: 0n,
+						factory: 1,
+						amplified_mathlib: 1,
+						amplified_template: 1,
+						volatile_mathlib: 1,
+						volatile_template: 1,
+						messagingProtocolAddress: '',
+						interfaces: {
+							cci: {},
+							garp: {},
+							protocol: {}
+						} as interfaces,
+						expectedGarpAddress: '',
+						expectedCCIAddress: ''
+					},
+					rpc: newRpc.replace(' ', '')
+				};
 				chainChanges.push(
 					rpcSet(changedChain).then(() => {
 						$chains = [
@@ -171,27 +270,64 @@
 	}
 
 	function computeExpectedGarp() {
-		const fullcode = garpBytescodes[messagingProtocol].replace('0x', '');
-		const salt = fullcode.slice(0, 64);
-		const bytecode = '0x' + fullcode.slice(64);
+		const garpFullcode = garpBytescodes[messagingProtocol].replace('0x', '');
+		const garpSalt = garpFullcode.slice(0, 64);
+		const garpBytecode = '0x' + garpFullcode.slice(64);
+		const cciFullcode = cciBytescodes[messagingProtocol].replace('0x', '');
+		const cciSalt = cciFullcode.slice(0, 64);
+		const cciBytecode = '0x' + cciFullcode.slice(64);
 		chains.update(($chains) => {
 			for (let i = 0; i < $chains.length; ++i) {
-				$chains[i].expectedGarpAddress =
+				const chain = $chains[i];
+				chain.expectedGarpAddress =
 					'0x' +
 					ethers
 						.keccak256(
 							'0xFF' +
 								factory.replace('0x', '') +
-								salt +
+								garpSalt +
 								ethers
 									.keccak256(
-										bytecode +
+										garpBytecode +
 											sendLostGasTo.replace('0x', '').padStart(64, '0') +
 											$chains[i].messagingProtocolAddress.replace('0x', '').padStart(64, '0')
 									)
 									.replace('0x', '')
 						)
 						.slice(2 + 12 * 2, 2 + 32 * 2);
+				chain.expectedCCIAddress =
+					'0x' +
+					ethers
+						.keccak256(
+							'0xFF' +
+								factory.replace('0x', '') +
+								cciSalt +
+								ethers
+									.keccak256(
+										cciBytecode +
+											chain.expectedGarpAddress.replace('0x', '').padStart(64, '0') +
+											(keyAddress ?? '').replace('0x', '').padStart(64, '0')
+									)
+									.replace('0x', '')
+						)
+						.slice(2 + 12 * 2, 2 + 32 * 2);
+				if (chain.provider) {
+					chain.interfaces['protocol'][messagingProtocol] = getCode(
+						chain.provider,
+						chain.messagingProtocolAddress
+					);
+					chain.interfaces['garp'][messagingProtocol] = getCode(
+						chain.provider,
+						chain.expectedGarpAddress
+					);
+					chain.interfaces['cci'][messagingProtocol] = getCode(
+						chain.provider,
+						chain.expectedCCIAddress
+					);
+				}
+				console.log(chain);
+				console.log(i);
+				console.log();
 			}
 			return $chains;
 		});
@@ -204,7 +340,7 @@
 
 <h1 class="font-bold text-xl">Deploy Catalyst</h1>
 <p>Catalyst can be deployed permissionlessly.</p>
-<input bind:value={privateKey} placeholder="key" />
+<input bind:value={privateKey} placeholder="key" on:input={computeExpectedGarp} />
 {keyAddress}
 
 <h2 class="font-semibold text-lg">Core Catalyst</h2>
@@ -226,7 +362,7 @@
 					{#await chain.factory}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(i, 'factory')}
+						<button class="deployActivated" class:deployed on:click={deployCore(i, 'factory')}
 							>Deploy</button
 						>
 					{/await}
@@ -236,8 +372,10 @@
 					{#await chain.amplified_mathlib}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(i, 'amplified_mathlib')}
-							>Deploy</button
+						<button
+							class="deployActivated"
+							class:deployed
+							on:click={deployCore(i, 'amplified_mathlib')}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -245,8 +383,10 @@
 					{#await chain.amplified_template}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(i, 'amplified_template')}
-							>Deploy</button
+						<button
+							class="deployActivated"
+							class:deployed
+							on:click={deployCore(i, 'amplified_template')}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -254,8 +394,10 @@
 					{#await chain.volatile_mathlib}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(i, 'volatile_mathlib')}
-							>Deploy</button
+						<button
+							class="deployActivated"
+							class:deployed
+							on:click={deployCore(i, 'volatile_mathlib')}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -263,8 +405,10 @@
 					{#await chain.volatile_template}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={call(i, 'volatile_template')}
-							>Deploy</button
+						<button
+							class="deployActivated"
+							class:deployed
+							on:click={deployCore(i, 'volatile_template')}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -310,29 +454,51 @@
 	<thead>
 		<tr>
 			<th>ChainId</th>
-			{#each $chains.slice(0, $chains.length - 1) as chainx, x}
+			{#each $chains.slice(0, $chains.length - 1) as chainx}
 				<th>{chainx.chainId}</th>
 			{/each}
 		</tr>
 		<tr>
 			<th>{messagingProtocol}</th>
-			{#each $chains.slice(0, $chains.length - 1) as chainx, x}
-				<th
-					><input
-						class="bg-gray-100"
-						bind:value={chainx.messagingProtocolAddress}
-						on:input={computeExpectedGarp}
-					/></th
-				>
+			{#each $chains.slice(0, $chains.length - 1) as chainx}
+				<th>
+					<div class="flex flex-row items-center w-40">
+						<input
+							class="bg-gray-100 h-5"
+							bind:value={chainx.messagingProtocolAddress}
+							on:input={computeExpectedGarp}
+						/>
+						{#await chainx.interfaces.protocol[messagingProtocol]}
+							<div class="rounded-r-full w-4 h-5 bg-gray-100"></div>
+						{:then deployed}
+							{#if deployed == undefined}
+								<div class="rounded-r-full w-4 h-5 bg-gray-100"></div>
+							{:else}
+								<div
+									class="rounded-r-full w-4 h-5"
+									class:bg-green-100={deployed > 4}
+									class:bg-red-100={deployed <= 4}
+								></div>
+							{/if}
+						{/await}
+					</div>
+				</th>
 			{/each}
 		</tr>
 		<tr>
 			<th>GARP</th>
 			{#each $chains.slice(0, $chains.length - 1) as chainx, x}
 				<th class="text-center">
-					<div class="w-40 monkey-ellipsis">
-						{chainx.expectedGarpAddress}
-					</div>
+					{#await chainx.interfaces.garp[messagingProtocol]}
+						<button class="w-40 monkey-ellipsis deployActivated deployed">...</button>
+					{:then deployed}
+						<button
+							class="w-40 monkey-ellipsis deployActivated"
+							class:deployed
+							on:click={deployInterfaces(x, 'garp', messagingProtocol)}
+							>{chainx.expectedGarpAddress}</button
+						>
+					{/await}
 				</th>
 			{/each}
 		</tr>
@@ -340,28 +506,27 @@
 			<th>CCI</th>
 			{#each $chains.slice(0, $chains.length - 1) as chainx, x}
 				<th class="text-center">
-					<div class="w-40 monkey-ellipsis">
-						{chainx.expectedGarpAddress}
-					</div>
+					{#await chainx.interfaces.cci[messagingProtocol]}
+						<button class="w-40 monkey-ellipsis deployActivated deployed">...</button>
+					{:then deployed}
+						<button
+							class="w-40 monkey-ellipsis deployActivated"
+							class:deployed
+							on:click={deployInterfaces(x, 'cci', messagingProtocol)}
+							>{chainx.expectedCCIAddress}</button
+						>
+					{/await}
 				</th>
 			{/each}
 		</tr>
 	</thead>
 	<tbody>
-		<tr>
-			<th>Deploy</th>
-			{#each $chains.slice(0, $chains.length - 1) as chainx, x}
-				<th class="text-center">
-					<button class="deployActivated">Deploy</button>
-				</th>
-			{/each}
-		</tr>
-		{#each $chains.slice(0, $chains.length - 1) as chainx, x}
+		{#each $chains.slice(0, $chains.length - 1) as chainx}
 			<tr>
 				<td>
 					{chainx.chainId}
 				</td>
-				{#each $chains.slice(0, $chains.length - 1) as chainy, y}
+				{#each $chains.slice(0, $chains.length - 1) as chainy}
 					<td> <button>Connect:{chainx.chainId},{chainy.chainId}</button> </td>
 				{/each}
 			</tr>
