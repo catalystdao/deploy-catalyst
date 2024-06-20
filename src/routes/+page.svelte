@@ -132,7 +132,7 @@
 			};
 
 			const transactionResponse = signer.sendTransaction(transactionData);
-			console({ transactionResponse });
+			console.log({ transactionResponse });
 			chains.update(($chains) => {
 				const chain = $chains[index];
 				chain[contract] = transactionResponse.then(async (submittedTransaction) => {
