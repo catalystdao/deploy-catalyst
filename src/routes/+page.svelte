@@ -376,7 +376,7 @@
 		checkAllConnections();
 	}
 
-	function checkAllConnections() {
+	async function checkAllConnections() {
 		connections.update(($connections) => {
 			const ch = $chains;
 			for (const fromChain of ch) {
@@ -397,9 +397,8 @@
 					}
 					$connections[fromChainId][toChainId] = cciContract
 						.chainIdentifierToDestinationAddress(destinationIdentifier)
-						.then((result: string) => {
-							return result.length > 2;
-						});
+						.then((result: string) => result.length > 2)
+						.catch(() => true);
 				}
 			}
 			return $connections;
@@ -436,8 +435,10 @@
 					{#await chain.factory}
 						<button class="deployActivated deployed">...</button>
 					{:then deployed}
-						<button class="deployActivated" class:deployed on:click={deployCore(i, 'factory')}
-							>Deploy</button
+						<button
+							class="deployActivated"
+							class:deployed
+							on:click={!deployed ? deployCore(i, 'factory') : () => {}}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -449,7 +450,7 @@
 						<button
 							class="deployActivated"
 							class:deployed
-							on:click={deployCore(i, 'amplified_mathlib')}>Deploy</button
+							on:click={!deployed ? deployCore(i, 'amplified_mathlib') : () => {}}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -460,7 +461,7 @@
 						<button
 							class="deployActivated"
 							class:deployed
-							on:click={deployCore(i, 'amplified_template')}>Deploy</button
+							on:click={!deployed ? deployCore(i, 'amplified_template') : () => {}}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -471,7 +472,7 @@
 						<button
 							class="deployActivated"
 							class:deployed
-							on:click={deployCore(i, 'volatile_mathlib')}>Deploy</button
+							on:click={!deployed ? deployCore(i, 'volatile_mathlib') : () => {}}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -482,7 +483,7 @@
 						<button
 							class="deployActivated"
 							class:deployed
-							on:click={deployCore(i, 'volatile_template')}>Deploy</button
+							on:click={!deployed ? deployCore(i, 'volatile_template') : () => {}}>Deploy</button
 						>
 					{/await}
 				</td>
@@ -569,7 +570,7 @@
 						<button
 							class="w-40 monkey-ellipsis deployActivated"
 							class:deployed
-							on:click={deployInterfaces(x, 'garp', messagingProtocol)}
+							on:click={!deployed ? deployInterfaces(x, 'garp', messagingProtocol) : () => {}}
 							>{chainx.expectedGarpAddress}</button
 						>
 					{/await}
@@ -586,7 +587,7 @@
 						<button
 							class="w-40 monkey-ellipsis deployActivated"
 							class:deployed
-							on:click={deployed ? deployInterfaces(x, 'cci', messagingProtocol) : () => {}}
+							on:click={!deployed ? deployInterfaces(x, 'cci', messagingProtocol) : () => {}}
 							>{chainx.expectedCCIAddress}</button
 						>
 					{/await}
@@ -608,7 +609,7 @@
 							<button
 								class="deployActivated"
 								class:deployed={connected}
-								on:click={connected ? connectInterfaces(chainx, chainy) : () => {}}
+								on:click={!connected ? connectInterfaces(chainx, chainy) : () => {}}
 								>Connect:{chainx.chainId},{chainy.chainId}</button
 							>
 						{/await}
