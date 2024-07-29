@@ -6,7 +6,7 @@
 		contractsAddresses,
 		contractBytecodes,
 		garpBytescodes,
-		cciBytescodes,
+		cciBytescode,
 		type MessagingVerions,
 		type InterfaceTypes,
 		cciABI
@@ -163,7 +163,7 @@
 				to: factory,
 				data:
 					interfaceType === 'cci'
-						? cciBytescodes[version] +
+						? cciBytescode +
 							chain.expectedGarpAddress.replace('0x', '').padStart(64, '0') +
 							(keyAddress ?? '').replace('0x', '').padStart(64, '0')
 						: interfaceType === 'garp'
@@ -318,7 +318,7 @@
 		const garpFullcode = garpBytescodes[messagingProtocol].replace('0x', '');
 		const garpSalt = garpFullcode.slice(0, 64);
 		const garpBytecode = '0x' + garpFullcode.slice(64);
-		const cciFullcode = cciBytescodes[messagingProtocol].replace('0x', '');
+		const cciFullcode = cciBytescode.replace('0x', '');
 		const cciSalt = cciFullcode.slice(0, 64);
 		const cciBytecode = '0x' + cciFullcode.slice(64);
 		chains.update(($chains) => {
